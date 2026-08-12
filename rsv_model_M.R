@@ -50,7 +50,7 @@ params <- list(
   staff_hh_size = 2L,
   room_mix_cutoff_days  = 540L,
   toddler_age_beta_a = 2,   # Beta shape a  (toddler age skew)
-  toddler_age_beta_b = 8,   # Beta shape b  (b > a => more young toddlers)
+  toddler_age_beta_b = 8,   # Beta shape b  
   # ── VACCINATION (nirsevimab, infants only) ───────────────────────────────
   rsv_season_start_day = 93L,
   rsv_season_months    = c(10L,11L,12L,1L,2L,3L),
@@ -65,11 +65,9 @@ params <- list(
   staff_age      = 10000L,
   # ── MSIS parameters ──────────────────────────────────────────────────────
   omega_M       = 1 / 112,   # maternal-antibody waning (M -> S)
-  omega_Mb      = 1 / 168.6,   # [MODEL A] post-fixed-phase mAb waning (S_ab->S, MI_ab->S) = swept omega_mab
-  omega_mab_fix = 1 / 53.6,    # [MODEL A] fixed full-protection phase (M_b -> S_ab), ~2 months (exp. mean 60 d)
-  theta_mab     = 0.16,      # [MODEL A] NO LONGER USED (kept for reference; protection is structural)
-  sev_mab       = 0.487,     # severity reduction for optional D/H layer (NOT USED HERE)
-  rho_mab       = 1, # was 0.2
+  omega_Mb      = 1 / 168.6,   
+  omega_mab_fix = 1 / 53.6,    
+  rho_mab       = 0.2,
   sigma_1 = 0.76, sigma_2 = 0.6, sigma_3 = 0.4,
   rho1 = 0.75, rho2 = 0.51,
   rho  = 1, inf_shape = 3,
@@ -91,8 +89,8 @@ params <- list(
   C_daycare   = M_infant_room,
   C_household = M_household,
   # ── Community FOI / scaling ─────────────────────────────────────────────────
-  lambda_ext_base = 5e-4,#5e-4,
-  beta_daycare    = 1.5,#1.2,
+  lambda_ext_base = 5e-4,
+  beta_daycare    = 1.5,
   beta_household  = 1.5,
   daycare_hours   = 1,
   household_hours = 1,
@@ -209,10 +207,7 @@ generate_population <- function(params, quiet = TRUE) {
     for (e in seq_len(draw_count(params$p_elderly)))
       add("elderly", sample(params$elderly_age_min:params$elderly_age_max, 1L), FALSE)
   }
-  # add_toddler <- function() {
-  #   g <- add("toddler", sample(params$toddler_age_min:params$toddler_age_max, 1L), TRUE)
-  #   toddler_gids <<- c(toddler_gids, g)
-  # }
+  
   
   add_toddler <- function() {
     a <- if (!is.null(params$toddler_age_beta_a)) params$toddler_age_beta_a else 2
@@ -326,9 +321,7 @@ initialize_agents <- function(params, vax_coverage = 0.0, quiet = TRUE) {
     if (wants_mab && eligible && dose_sim_day <= params$n_days) {
       agents$intended_vax[i] <- TRUE
       if (dose_sim_day < 1L) {
-        ## [MODEL A] dosed before sim start: roll the waning chain forward
-        ## (no exposure pre-sim), so the infant may be in M_b / S_ab / S now.
-        ## NOTE: with these ages/season months this branch is essentially never hit.
+       
         elapsed <- 1L - dose_sim_day
         st <- "M_b"; d_in <- 0L
         # for (k in seq_len(elapsed)) {
@@ -384,7 +377,7 @@ initialize_agents <- function(params, vax_coverage = 0.0, quiet = TRUE) {
 transmission_step <- function(agents, day, params) {
   n   <- nrow(agents)
   s0  <- agents$state
-  rho_mab <- if (!is.null(params$rho_mab)) params$rho_mab else 1   # [MODEL A] I_ab shedding multiplier (default 1 = unchanged)
+  rho_mab <- if (!is.null(params$rho_mab)) params$rho_mab else 1   
   
   ## [MODEL A] susceptibility by state: S and S_ab are fully susceptible (1);
   ## M_b (full protection), MI_ab (immune), M, I, I_ab are not (0).
@@ -400,14 +393,14 @@ transmission_step <- function(agents, day, params) {
   rm_roles <- rownames(params$C_daycare)
   
   # ---- start-of-day effective infectiousness (prior-day infectious agents) ----
-  ## [MODEL A] BOTH symptomatic I and asymptomatic I_ab transmit.
+
   eff <- numeric(n)
   for (j in which(s0 == "I" | s0 == "I_ab")) {
     ct <- compute_Ct_direct(agents$days_in_state[j], agents$role[j], params)
     eff[j] <- get_kappa(agents$role[j], params) *
       get_rho(agents$n_infections[j], params) *
       (params$beta1 + params$beta2 * f_Ct(ct, params)) *
-      (if (s0[j] == "I_ab") rho_mab else 1)          # [MODEL A] asymptomatic breakthroughs shed less
+      (if (s0[j] == "I_ab") rho_mab else 1)         
   }
   
   # ---- mutable working copies ----
@@ -435,7 +428,7 @@ transmission_step <- function(agents, day, params) {
     ninf[i]    <<- ninf[i] + 1L
     dis[i]     <<- 0L
     ever[i]    <<- TRUE
-    if (!asymp && day >= params$outcome_from_day) outcome[i] <<- TRUE   # asymptomatic excluded
+    if (!asymp && day >= params$outcome_from_day) outcome[i] <<- TRUE  
     dayinf[i]  <<- day
     source[i]  <<- src
     recov[i]   <<- day + get_inf_duration(ninf[i], params)
@@ -475,7 +468,7 @@ transmission_step <- function(agents, day, params) {
   }
   
   ## ---- PHASE 0: COMMUNITY IMPORTATION ----
-  for (i in which(state == "S" | state == "S_ab")) {        # [MODEL A] susceptible set = S, S_ab
+  for (i in which(state == "S" | state == "S_ab")) {       
     phi_i   <- get_phi_role(agents$role[i], params)
     sigma_i <- get_sigma(ninf[i], params)
     sus_i   <- sus_of(state[i])
@@ -585,22 +578,22 @@ daily_transitions <- function(agents, params, day) {
         agents$state[i] <- "S_ab"; agents$days_in_state[i] <- 0L
       }
       
-    } else if (s == "S_ab") {                                 # [MODEL A] mAb window wanes -> ordinary S (n_inf unchanged = 0)
+    } else if (s == "S_ab") {                               
       if (runif(1) < (1 - exp(-params$omega_Mb))) {
         agents$state[i] <- "S"; agents$days_in_state[i] <- 0L
       }
       
-    } else if (s == "MI_ab") {                                # [MODEL A] immune-with-mAb wanes -> S (n_inf = 1; S1V-equivalent)
+    } else if (s == "MI_ab") {                              
       if (runif(1) < (1 - exp(-params$omega_Mb))) {
         agents$state[i] <- "S"; agents$days_in_state[i] <- 0L
       }
       
-    } else if (s == "I_ab") {                                 # [MODEL A] asymptomatic breakthrough recovers -> immune MI_ab
+    } else if (s == "I_ab") {                               
       if (!is.na(agents$recovery_day[i]) && day >= agents$recovery_day[i]) {
         agents$state[i] <- "MI_ab"; agents$days_in_state[i] <- 0L; agents$recovery_day[i] <- NA_integer_
       }
       
-    } else if (s == "I") {                                    # symptomatic recovers -> S (n_inf >= 1 => immune when sigma=0)
+    } else if (s == "I") {                                  
       if (!is.na(agents$recovery_day[i]) && day >= agents$recovery_day[i]) {
         agents$state[i] <- "S"; agents$days_in_state[i] <- 0L; agents$recovery_day[i] <- NA_integer_
       }
@@ -683,7 +676,7 @@ run_simulation <- function(params, vax_coverage = 0.0, record_panel = FALSE, qui
     
     daily$dc_I[d] <- sum(is_I & agents$is_daycare)
     daily$hh_I[d] <- sum(is_I & !agents$is_daycare)
-    daily$dc_I_sym[d] <- sum(is_sym & agents$is_daycare)    # symptomatic-only daycare cases
+    daily$dc_I_sym[d] <- sum(is_sym & agents$is_daycare)  
     daily$hh_I_sym[d] <- sum(is_sym & !agents$is_daycare)
     daily$dc_new_inf[d] <- sum(is_new & agents$is_daycare)
     daily$hh_new_inf[d] <- sum(is_new & !agents$is_daycare)
