@@ -3,7 +3,7 @@ library(tidyverse)
 library(ggsci)
 
 ## ------------------------------ CONFIG ------------------------------------
-in_dir  <- "Results/Paper_Case_2_repo/results1"
+in_dir  <- "Results"
 out_dir <- in_dir
 B_BOOT       <- 1000L
 PREV_METRIC  <- "sym"                 # "all" incl. asymptomatic I_ab ; "sym" symptomatic
